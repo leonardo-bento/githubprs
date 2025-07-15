@@ -1,103 +1,217 @@
-import Image from "next/image";
+'use client';
+
+import { useState } from 'react';
+import { getRepositories, getPullRequestsByMembers } from '../services/github';
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  // State variables for user inputs
+  const [pat, setPat] = useState(''); // Personal Access Token
+  const [organization, setOrganization] = useState(''); // GitHub Organization
+  const [repository, setRepository] = useState(''); // GitHub Repository
+  const [teamMembers, setTeamMembers] = useState(''); // Comma-separated list of team members
+  const [pullRequests, setPullRequests] = useState([]); // List of fetched PRs
+  const [loading, setLoading] = useState(false); // Loading state for API calls
+  const [error, setError] = useState(''); // Error message state
+  const [message, setMessage] = useState(''); // General message for user feedback
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+  const fetchGitHubData = async () => {
+    setLoading(true);
+    setError('');
+    setMessage('');
+    setPullRequests([]); // Clear previous PRs
+
+    if (!pat) {
+      setError('Please enter your GitHub Personal Access Token.');
+      setLoading(false);
+      return;
+    }
+
+    if (!organization && !repository) {
+      setError('Please enter either an Organization or a Repository name.');
+      setLoading(false);
+      return;
+    }
+
+    const memberUsernames = teamMembers.split(',').map(name => name.trim()).filter(name => name);
+
+    let reposToFetch = [];
+
+    try {
+      let repositories = await getRepositories(organization, pat);
+      let pullRequests = await getPullRequestsByMembers(repositories, memberUsernames, pat);
+
+      if (pullRequests.length === 0) {
+        setMessage('No open pull requests found for the specified team members in the given repositories.');
+      } else {
+        setPullRequests(pullRequests);
+      }
+
+    } catch (err: any) {
+      setError(`Error: ${err.message}. Please check your PAT and inputs.`);
+      console.error('GitHub API error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+  // Function to fetch pull requests from GitHub
+  return (
+    <div className="min-h-screen bg-gray-100 p-4 font-sans flex items-center justify-center">
+      <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-4xl">
+        <h1 className="text-3xl font-bold text-center text-gray-800 mb-6">GitHub Pull Request Lister</h1>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+          <div>
+            <label htmlFor="pat" className="block text-gray-700 text-sm font-bold mb-2">
+              GitHub Personal Access Token (PAT):
+            </label>
+            <input
+              type="password"
+              id="pat"
+              className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={pat}
+              onChange={(e) => setPat(e.target.value)}
+              placeholder="e.g., ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
             />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+            <p className="text-xs text-gray-500 mt-1">
+              Requires 'repo' scope for private repositories. Create one in GitHub Settings &gt; Developer settings &gt; Personal access tokens.
+            </p>
+          </div>
+
+          <div>
+            <label htmlFor="organization" className="block text-gray-700 text-sm font-bold mb-2">
+              GitHub Organization (Optional):
+            </label>
+            <input
+              type="text"
+              id="organization"
+              className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={organization}
+              onChange={(e) => setOrganization(e.target.value)}
+              placeholder="e.g., octocat"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              If specified, lists PRs across all repos in this organization.
+            </p>
+          </div>
+
+          <div>
+            <label htmlFor="repository" className="block text-gray-700 text-sm font-bold mb-2">
+              GitHub Repository (Optional):
+            </label>
+            <input
+              type="text"
+              id="repository"
+              className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={repository}
+              onChange={(e) => setRepository(e.target.value)}
+              placeholder="e.g., my-awesome-repo"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              If specified, lists PRs only from this repository. Requires Organization or a team member as owner.
+            </p>
+          </div>
+
+          <div>
+            <label htmlFor="teamMembers" className="block text-gray-700 text-sm font-bold mb-2">
+              Team Members (GitHub Usernames, comma-separated):
+            </label>
+            <input
+              type="text"
+              id="teamMembers"
+              className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={teamMembers}
+              onChange={(e) => setTeamMembers(e.target.value)}
+              placeholder="e.g., user1, user2, user3"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Only PRs opened by these users will be listed.
+            </p>
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+
+        <div className="flex justify-center mb-6">
+          <button
+            onClick={fetchGitHubData}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition duration-200 ease-in-out transform hover:scale-105"
+            disabled={loading}
+          >
+            {loading ? 'Fetching PRs...' : 'Get Pull Requests'}
+          </button>
+        </div>
+
+        {error && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg relative mb-4" role="alert">
+            <strong className="font-bold">Error!</strong>
+            <span className="block sm:inline"> {error}</span>
+          </div>
+        )}
+
+        {message && (
+          <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded-lg relative mb-4" role="alert">
+            <strong className="font-bold">Info!</strong>
+            <span className="block sm:inline"> {message}</span>
+          </div>
+        )}
+
+        {pullRequests.length > 0 && (
+          <div className="mt-8">
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">Open Pull Requests ({pullRequests.length})</h2>
+            <div className="overflow-x-auto rounded-lg shadow">
+              <table className="min-w-full leading-normal">
+                <thead>
+                  <tr>
+                    <th className="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider rounded-tl-lg">
+                      Title
+                    </th>
+                    <th className="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                      Repository
+                    </th>
+                    <th className="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                      Author
+                    </th>
+                    <th className="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                      State
+                    </th>
+                    <th className="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider rounded-tr-lg">
+                      Created At
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pullRequests.map((pr) => (
+                    <tr key={pr.id} className="hover:bg-gray-50">
+                      <td className="px-5 py-5 border-b border-gray-200 bg-white text-sm">
+                        <a href={pr.html_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                          {pr.title}
+                        </a>
+                      </td>
+                      <td className="px-5 py-5 border-b border-gray-200 bg-white text-sm">
+                        <a href={`https://github.com/${pr.repoOwner}/${pr.repoName}`} target="_blank" rel="noopener noreferrer" className="text-gray-900">
+                          {pr.repoOwner}/{pr.repoName}
+                        </a>
+                      </td>
+                      <td className="px-5 py-5 border-b border-gray-200 bg-white text-sm">
+                        <a href={pr.user.html_url} target="_blank" rel="noopener noreferrer" className="text-gray-900">
+                          {pr.user.login}
+                        </a>
+                      </td>
+                      <td className="px-5 py-5 border-b border-gray-200 bg-white text-sm">
+                        <span className={`relative inline-block px-3 py-1 font-semibold leading-tight ${pr.state === 'open' ? 'text-green-900' : 'text-red-900'}`}>
+                          <span aria-hidden="true" className={`absolute inset-0 opacity-50 rounded-full ${pr.state === 'open' ? 'bg-green-200' : 'bg-red-200'}`}></span>
+                          <span className="relative">{pr.state}</span>
+                        </span>
+                      </td>
+                      <td className="px-5 py-5 border-b border-gray-200 bg-white text-sm">
+                        {new Date(pr.created_at).toLocaleDateString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
