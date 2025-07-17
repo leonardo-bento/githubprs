@@ -1,18 +1,24 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { getRepositories, getPullRequestsByMembers } from '../services/github';
 
 export default function Home() {
   // State variables for user inputs
   const [pat, setPat] = useState(''); // Personal Access Token
   const [organization, setOrganization] = useState(''); // GitHub Organization
-  const [repository, setRepository] = useState(''); // GitHub Repository
   const [teamMembers, setTeamMembers] = useState(''); // Comma-separated list of team members
   const [pullRequests, setPullRequests] = useState([]); // List of fetched PRs
   const [loading, setLoading] = useState(false); // Loading state for API calls
   const [error, setError] = useState(''); // Error message state
   const [message, setMessage] = useState(''); // General message for user feedback
+
+  // Set environment variables after component mounts (client-side only)
+  useEffect(() => {
+    setPat(process.env.NEXT_PUBLIC_PAT || '');
+    setTeamMembers(process.env.NEXT_PUBLIC_USERS || '');
+    setOrganization(process.env.NEXT_PUBLIC_ORGANIZATION || '');
+  }, []);
 
   const fetchGitHubData = async () => {
     setLoading(true);
@@ -26,8 +32,8 @@ export default function Home() {
       return;
     }
 
-    if (!organization && !repository) {
-      setError('Please enter either an Organization or a Repository name.');
+    if (!organization) {
+      setError('Please enter either an Organization name.');
       setLoading(false);
       return;
     }
@@ -37,8 +43,7 @@ export default function Home() {
     let reposToFetch = [];
 
     try {
-      let repositories = await getRepositories(organization, pat);
-      let pullRequests = await getPullRequestsByMembers(repositories, memberUsernames, pat);
+      let pullRequests = await getPullRequestsByMembers(organization, memberUsernames, pat);
 
       if (pullRequests.length === 0) {
         setMessage('No open pull requests found for the specified team members in the given repositories.');
@@ -91,23 +96,6 @@ export default function Home() {
             />
             <p className="text-xs text-gray-500 mt-1">
               If specified, lists PRs across all repos in this organization.
-            </p>
-          </div>
-
-          <div>
-            <label htmlFor="repository" className="block text-gray-700 text-sm font-bold mb-2">
-              GitHub Repository (Optional):
-            </label>
-            <input
-              type="text"
-              id="repository"
-              className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={repository}
-              onChange={(e) => setRepository(e.target.value)}
-              placeholder="e.g., my-awesome-repo"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              If specified, lists PRs only from this repository. Requires Organization or a team member as owner.
             </p>
           </div>
 
@@ -186,8 +174,8 @@ export default function Home() {
                         </a>
                       </td>
                       <td className="px-5 py-5 border-b border-gray-200 bg-white text-sm">
-                        <a href={`https://github.com/${pr.repoOwner}/${pr.repoName}`} target="_blank" rel="noopener noreferrer" className="text-gray-900">
-                          {pr.repoOwner}/{pr.repoName}
+                        <a href={pr.repository_url} target="_blank" rel="noopener noreferrer" className="text-gray-900">
+                          {pr.repository_url}
                         </a>
                       </td>
                       <td className="px-5 py-5 border-b border-gray-200 bg-white text-sm">
