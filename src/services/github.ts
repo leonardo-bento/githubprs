@@ -29,14 +29,14 @@ const getHeaders = (pat: string) => {
 export const getPullRequestsByMembers = async (
   organization: string, 
   memberUsernames: string[], 
-  pat: string
+  pat: string,
+  lastDate: Date
 ): Promise<PullRequest[]> => { 
   let allPulls: PullRequest[] = [];
   // Step 2: Fetch pull requests for each repository
   let page = 1;
   let hasNextPage = true;
-  let lastDate = new Date();
-  lastDate.setDate(lastDate.getDate() - 1);
+  
   const lastDateStr = lastDate.toISOString().split('T')[0]; // Format as YYYY-MM-DD
   const authors = memberUsernames.join('+author:');
   

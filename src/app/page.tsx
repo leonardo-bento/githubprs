@@ -2,12 +2,16 @@
 
 import { useState, useEffect } from 'react';
 import { getPullRequestsByMembers, PullRequest } from '../services/github';
+import PullRequestsList from '../components/PullRequestsList';
+import InputField from '../components/InputField';
+import DateField from '../components/DateField';
 
 export default function Home() {
   // State variables for user inputs
   const [pat, setPat] = useState(''); // Personal Access Token
   const [organization, setOrganization] = useState(''); // GitHub Organization
   const [teamMembers, setTeamMembers] = useState(''); // Comma-separated list of team members
+  const [lastDate, setLastDate] = useState(''); // Date filter for PRs (YYYY-MM-DD format)
   const [pullRequests, setPullRequests] = useState<PullRequest[]>([]); // List of fetched PRs
   const [loading, setLoading] = useState(false); // Loading state for API calls
   const [error, setError] = useState(''); // Error message state
@@ -18,6 +22,11 @@ export default function Home() {
     setPat(process.env.NEXT_PUBLIC_PAT || '');
     setTeamMembers(process.env.NEXT_PUBLIC_USERS || '');
     setOrganization(process.env.NEXT_PUBLIC_ORGANIZATION || '');
+    
+    // Set default date to yesterday
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    setLastDate(yesterday.toISOString().split('T')[0]);
   }, []);
 
   const fetchGitHubData = async () => {
@@ -41,7 +50,7 @@ export default function Home() {
     const memberUsernames = teamMembers.split(',').map(name => name.trim()).filter(name => name);
 
     try {
-      let pullRequests = await getPullRequestsByMembers(organization, memberUsernames, pat);
+      let pullRequests = await getPullRequestsByMembers(organization, memberUsernames, pat, lastDate);
 
       if (pullRequests.length === 0) {
         setMessage('No open pull requests found for the specified team members in the given repositories.');
@@ -87,68 +96,45 @@ export default function Home() {
           gap: 'var(--spacing-6)', 
           marginBottom: 'var(--spacing-6)'
         }}>
-          <div>
-            <label htmlFor="pat" className="label">
-              GitHub Personal Access Token (PAT):
-            </label>
-            <input
-              type="password"
-              id="pat"
-              className="input"
-              value={pat}
-              onChange={(e) => setPat(e.target.value)}
-              placeholder="e.g., ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-            />
-            <p style={{ 
-              fontSize: '0.75rem', 
-              color: 'var(--muted-foreground)', 
-              marginTop: 'var(--spacing-1)'
-            }}>
-              Requires 'repo' scope for private repositories. Create one in GitHub Settings &gt; Developer settings &gt; Personal access tokens.
-            </p>
-          </div>
+          <InputField
+            id="pat"
+            label="GitHub Personal Access Token (PAT):"
+            type="password"
+            value={pat}
+            onChange={(e) => setPat(e.target.value)}
+            placeholder="e.g., ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+            description="Requires 'repo' scope for private repositories. Create one in GitHub Settings > Developer settings > Personal access tokens."
+            required
+          />
 
-          <div>
-            <label htmlFor="organization" className="label">
-              GitHub Organization (Optional):
-            </label>
-            <input
-              type="text"
-              id="organization"
-              className="input"
-              value={organization}
-              onChange={(e) => setOrganization(e.target.value)}
-              placeholder="e.g., octocat"
-            />
-            <p style={{ 
-              fontSize: '0.75rem', 
-              color: 'var(--muted-foreground)', 
-              marginTop: 'var(--spacing-1)'
-            }}>
-              If specified, lists PRs across all repos in this organization.
-            </p>
-          </div>
+          <InputField
+            id="organization"
+            label="GitHub Organization (Optional):"
+            type="text"
+            value={organization}
+            onChange={(e) => setOrganization(e.target.value)}
+            placeholder="e.g., octocat"
+            description="If specified, lists PRs across all repos in this organization."
+          />
 
-          <div>
-            <label htmlFor="teamMembers" className="label">
-              Team Members (GitHub Usernames, comma-separated):
-            </label>
-            <input
-              type="text"
-              id="teamMembers"
-              className="input"
-              value={teamMembers}
-              onChange={(e) => setTeamMembers(e.target.value)}
-              placeholder="e.g., user1, user2, user3"
-            />
-            <p style={{ 
-              fontSize: '0.75rem', 
-              color: 'var(--muted-foreground)', 
-              marginTop: 'var(--spacing-1)'
-            }}>
-              Only PRs opened by these users will be listed.
-            </p>
-          </div>
+          <InputField
+            id="teamMembers"
+            label="Team Members (GitHub Usernames, comma-separated):"
+            type="text"
+            value={teamMembers}
+            onChange={(e) => setTeamMembers(e.target.value)}
+            placeholder="e.g., user1, user2, user3"
+            description="Only PRs opened by these users will be listed."
+          />
+
+          <DateField
+            id="lastDate"
+            label="Search PRs created after:"
+            value={lastDate}
+            onChange={(e) => setLastDate(e.target.value)}
+            description="Only pull requests created after this date will be shown. Defaults to yesterday if left empty."
+            max={new Date().toISOString().split('T')[0]} // Don't allow future dates
+          />
         </div>
 
         <div style={{ 
@@ -184,63 +170,7 @@ export default function Home() {
           </div>
         )}
 
-        {pullRequests.length > 0 && (
-          <div style={{ marginTop: 'var(--spacing-8)' }}>
-            <h2 style={{ 
-              fontSize: '1.5rem', 
-              fontWeight: 'bold', 
-              color: 'var(--foreground)', 
-              marginBottom: 'var(--spacing-4)'
-            }}>
-              Open Pull Requests ({pullRequests.length})
-            </h2>
-            <div style={{ 
-              overflowX: 'auto', 
-              borderRadius: 'var(--radius-lg)'
-            }}>
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Title</th>
-                    <th>Repository</th>
-                    <th>Author</th>
-                    <th>State</th>
-                    <th>Created At</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pullRequests.map((pr) => (
-                    <tr key={pr.id}>
-                      <td>
-                        <a href={pr.html_url} target="_blank" rel="noopener noreferrer" className="link">
-                          {pr.title}
-                        </a>
-                      </td>
-                      <td>
-                        <a href={pr.repository_url} target="_blank" rel="noopener noreferrer" className="link">
-                          {pr.repository_url}
-                        </a>
-                      </td>
-                      <td>
-                        <a href={pr.user.html_url} target="_blank" rel="noopener noreferrer" className="link">
-                          {pr.user.login}
-                        </a>
-                      </td>
-                      <td>
-                        <span className={`status-badge status-${pr.state}`}>
-                          {pr.state}
-                        </span>
-                      </td>
-                      <td>
-                        {new Date(pr.created_at).toLocaleDateString()}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+        <PullRequestsList pullRequests={pullRequests} />
       </div>
     </div>
   );
