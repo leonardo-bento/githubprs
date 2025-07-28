@@ -29,6 +29,54 @@ To learn more about Next.js, take a look at the following resources:
 
 You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
+## Docker Setup
+
+This project includes Docker support for both development and production environments.
+
+### Production
+
+To build and run the production version:
+
+```bash
+# Build and start the production container
+docker-compose up --build
+
+# Or run in detached mode
+docker-compose up -d --build
+```
+
+The app will be available at [http://localhost:3000](http://localhost:3000).
+
+### Development
+
+To run the development version with hot reloading:
+
+```bash
+# Start the development container
+docker-compose --profile dev up --build
+
+# Or run in detached mode
+docker-compose --profile dev up -d --build
+```
+
+The development server will be available at [http://localhost:3001](http://localhost:3001).
+
+### Docker Commands
+
+```bash
+# Stop all containers
+docker-compose down
+
+# Stop and remove volumes
+docker-compose down -v
+
+# View logs
+docker-compose logs
+
+# Rebuild without cache
+docker-compose build --no-cache
+```
+
 ## Deploy on Vercel
 
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.

@@ -45,9 +45,7 @@ export const getPullRequestsByMembers = async (
     const response = await fetch(pullsUrl, { headers: getHeaders(pat) });
     
     if (!response.ok) {
-      // Log error but continue with other repos
-      console.error(`Failed to fetch pull requests: ${response.statusText}`);
-      break; // Stop fetching for this repo, move to next
+      throw new Error(`Failed to fetch pull requests: ${response.statusText}`);
     }
     
     const data: GitHubSearchResponse = await response.json();

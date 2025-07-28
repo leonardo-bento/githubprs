@@ -11,7 +11,7 @@ export default function Home() {
   const [pat, setPat] = useState(''); // Personal Access Token
   const [organization, setOrganization] = useState(''); // GitHub Organization
   const [teamMembers, setTeamMembers] = useState(''); // Comma-separated list of team members
-  const [lastDate, setLastDate] = useState(''); // Date filter for PRs (YYYY-MM-DD format)
+  const [lastDate, setLastDate] = useState<string>(''); // Date filter for PRs (YYYY-MM-DD format)
   const [pullRequests, setPullRequests] = useState<PullRequest[]>([]); // List of fetched PRs
   const [loading, setLoading] = useState(false); // Loading state for API calls
   const [error, setError] = useState(''); // Error message state
@@ -50,7 +50,7 @@ export default function Home() {
     const memberUsernames = teamMembers.split(',').map(name => name.trim()).filter(name => name);
 
     try {
-      let pullRequests = await getPullRequestsByMembers(organization, memberUsernames, pat, lastDate);
+      let pullRequests = await getPullRequestsByMembers(organization, memberUsernames, pat, new Date(lastDate));
 
       if (pullRequests.length === 0) {
         setMessage('No open pull requests found for the specified team members in the given repositories.');
