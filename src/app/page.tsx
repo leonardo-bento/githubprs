@@ -12,6 +12,7 @@ export default function Home() {
   const [organization, setOrganization] = useState(''); // GitHub Organization
   const [teamMembers, setTeamMembers] = useState(''); // Comma-separated list of team members
   const [lastDate, setLastDate] = useState<string>(''); // Date filter for PRs (YYYY-MM-DD format)
+  const [todayDate, setTodayDate] = useState<string>(''); // Date filter for PRs (YYYY-MM-DD format)
   const [pullRequests, setPullRequests] = useState<PullRequest[]>([]); // List of fetched PRs
   const [loading, setLoading] = useState(false); // Loading state for API calls
   const [error, setError] = useState(''); // Error message state
@@ -27,6 +28,9 @@ export default function Home() {
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
     setLastDate(yesterday.toISOString().split('T')[0]);
+    
+    const today = new Date();
+    setTodayDate(today.toISOString().split('T')[0]);
   }, []);
 
   const fetchGitHubData = async () => {
@@ -133,7 +137,7 @@ export default function Home() {
             value={lastDate}
             onChange={(e) => setLastDate(e.target.value)}
             description="Only pull requests created after this date will be shown. Defaults to yesterday if left empty."
-            max={new Date().toISOString().split('T')[0]} // Don't allow future dates
+            max={todayDate} // Don't allow future dates
           />
         </div>
 
