@@ -1,7 +1,7 @@
-import { PullRequest } from '../services/github';
+import { ListedPullRequest } from '../services/github';
 
 interface PullRequestsListProps {
-  pullRequests: PullRequest[];
+  pullRequests: ListedPullRequest[];
 }
 
 export default function PullRequestsList({ pullRequests }: PullRequestsListProps) {
@@ -29,6 +29,7 @@ export default function PullRequestsList({ pullRequests }: PullRequestsListProps
               <th>Title</th>
               <th>Repository</th>
               <th>Author</th>
+              <th>Match</th>
               <th>State</th>
               <th>Created At</th>
             </tr>
@@ -70,6 +71,7 @@ export default function PullRequestsList({ pullRequests }: PullRequestsListProps
                     </a>
                   </div>
                 </td>
+                <td style={{ fontSize: '0.875rem' }}>{pr.matchSource}</td>
                 <td>
                   <span className={`status-badge status-${pr.state}`}>
                     {pr.state}

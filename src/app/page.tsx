@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getPullRequestsByMembers, PullRequest } from '../services/github';
+import { getPullRequestsWithMatch, ListedPullRequest } from '../services/github';
 import PullRequestsList from '../components/PullRequestsList';
 import InputField from '../components/InputField';
 import DateField from '../components/DateField';
@@ -11,9 +11,10 @@ export default function Home() {
   const [pat, setPat] = useState(''); // Personal Access Token
   const [organization, setOrganization] = useState(''); // GitHub Organization
   const [teamMembers, setTeamMembers] = useState(''); // Comma-separated list of team members
+  const [groups, setGroups] = useState(''); // Comma-separated list of groups (optional)
   const [lastDate, setLastDate] = useState<string>(''); // Date filter for PRs (YYYY-MM-DD format)
   const [todayDate, setTodayDate] = useState<string>(''); // Date filter for PRs (YYYY-MM-DD format)
-  const [pullRequests, setPullRequests] = useState<PullRequest[]>([]); // List of fetched PRs
+  const [pullRequests, setPullRequests] = useState<ListedPullRequest[]>([]); // List of fetched PRs
   const [loading, setLoading] = useState(false); // Loading state for API calls
   const [error, setError] = useState(''); // Error message state
   const [message, setMessage] = useState(''); // General message for user feedback
@@ -22,6 +23,7 @@ export default function Home() {
   useEffect(() => {
     setPat(process.env.NEXT_PUBLIC_PAT || '');
     setTeamMembers(process.env.NEXT_PUBLIC_USERS || '');
+    setGroups(process.env.NEXT_PUBLIC_GROUPS || '');
     setOrganization(process.env.NEXT_PUBLIC_ORGANIZATION || '');
     
     // Set default date to yesterday
@@ -52,14 +54,33 @@ export default function Home() {
     }
 
     const memberUsernames = teamMembers.split(',').map(name => name.trim()).filter(name => name);
+    const groupSlugs = groups.split(',').map((g) => g.trim()).filter(Boolean);
+
+    if (memberUsernames.length === 0 && groupSlugs.length === 0) {
+      setError('Enter at least one team member (username) or one group (GitHub team slug).');
+      setLoading(false);
+      return;
+    }
 
     try {
-      let pullRequests = await getPullRequestsByMembers(organization, memberUsernames, pat, new Date(lastDate));
+      const { pullRequests, teamSearchWarning } = await getPullRequestsWithMatch(
+        organization,
+        memberUsernames,
+        groupSlugs,
+        pat,
+        new Date(lastDate)
+      );
+
+      setPullRequests(pullRequests);
 
       if (pullRequests.length === 0) {
-        setMessage('No open pull requests found for the specified team members in the given repositories.');
+        const noResults =
+          'No open pull requests found for the specified users and/or groups in the given organization.';
+        setMessage(
+          teamSearchWarning ? `${teamSearchWarning} ${noResults}` : noResults
+        );
       } else {
-        setPullRequests(pullRequests);
+        setMessage(teamSearchWarning || '');
       }
 
     } catch (err: any) {
@@ -129,6 +150,16 @@ export default function Home() {
             onChange={(e) => setTeamMembers(e.target.value)}
             placeholder="e.g., user1, user2, user3"
             description="Only PRs opened by these users will be listed."
+          />
+
+          <InputField
+            id="groups"
+            label="Groups (comma-separated):"
+            type="text"
+            value={groups}
+            onChange={(e) => setGroups(e.target.value)}
+            placeholder="e.g., engineering, security"
+            description="Optional. Org team slugs or org/team paths. Matches PRs with that team requested for review (search needs read:org on your PAT)."
           />
 
           <DateField
