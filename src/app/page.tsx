@@ -1,212 +1,116 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { getPullRequestsWithMatch, ListedPullRequest } from '../services/github';
-import PullRequestsList from '../components/PullRequestsList';
-import InputField from '../components/InputField';
-import DateField from '../components/DateField';
+import { useEffect, useState } from 'react';
+import Discover, { DiscoverySettings } from '@/components/Discover';
+import InputField from '@/components/InputField';
+import RemoveConfirmation from '@/components/RemoveConfirmation';
+import type { TrackedCard } from '@/lib/tracking';
+
+interface ListResponse { viewer: string; pullRequests: TrackedCard[]; message?: string }
+interface Config extends DiscoverySettings { hasToken: boolean }
 
 export default function Home() {
-  // State variables for user inputs
-  const [pat, setPat] = useState(''); // Personal Access Token
-  const [organization, setOrganization] = useState(''); // GitHub Organization
-  const [teamMembers, setTeamMembers] = useState(''); // Comma-separated list of team members
-  const [groups, setGroups] = useState(''); // Comma-separated list of groups (optional)
-  const [lastDate, setLastDate] = useState<string>(''); // Date filter for PRs (YYYY-MM-DD format)
-  const [todayDate, setTodayDate] = useState<string>(''); // Date filter for PRs (YYYY-MM-DD format)
-  const [pullRequests, setPullRequests] = useState<ListedPullRequest[]>([]); // List of fetched PRs
-  const [loading, setLoading] = useState(false); // Loading state for API calls
-  const [error, setError] = useState(''); // Error message state
-  const [message, setMessage] = useState(''); // General message for user feedback
+  const [tab, setTab] = useState<'tracked' | 'discover'>('tracked');
+  const [config, setConfig] = useState<Config | null>(null);
+  const [token, setToken] = useState('');
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [viewer, setViewer] = useState('');
+  const [pullRequests, setPullRequests] = useState<TrackedCard[]>([]);
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState('');
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+  const [removing, setRemoving] = useState<TrackedCard | null>(null);
 
-  // Set environment variables after component mounts (client-side only)
+  function updateList(data: ListResponse) {
+    setPullRequests(data.pullRequests); setViewer(data.viewer); setMessage(data.message || '');
+  }
+
   useEffect(() => {
-    setPat(process.env.NEXT_PUBLIC_PAT || '');
-    setTeamMembers(process.env.NEXT_PUBLIC_USERS || '');
-    setGroups(process.env.NEXT_PUBLIC_GROUPS || '');
-    setOrganization(process.env.NEXT_PUBLIC_ORGANIZATION || '');
-    
-    // Set default date to yesterday
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    setLastDate(yesterday.toISOString().split('T')[0]);
-    
-    const today = new Date();
-    setTodayDate(today.toISOString().split('T')[0]);
+    let active = true;
+    async function load() {
+      try {
+        const [configResponse, listResponse] = await Promise.all([fetch('/api/config'), fetch('/api/tracked')]);
+        const [settings, list] = await Promise.all([configResponse.json(), listResponse.json()]);
+        if (!active) return;
+        if (configResponse.ok) { setConfig(settings); setSettingsOpen(!settings.hasToken); }
+        if (!listResponse.ok) throw new Error(list.error);
+        updateList(list);
+      } catch (error) { if (active) setError(error instanceof Error ? error.message : 'Could not load saved PRs. Reload to try again.'); }
+      finally { if (active) setInitialLoading(false); }
+    }
+    void load();
+    return () => { active = false; };
   }, []);
 
-  const fetchGitHubData = async () => {
-    setLoading(true);
-    setError('');
-    setMessage('');
-    setPullRequests([]); // Clear previous PRs
-
-    if (!pat) {
-      setError('Please enter your GitHub Personal Access Token.');
-      setLoading(false);
-      return;
-    }
-
-    if (!organization) {
-      setError('Please enter either an Organization name.');
-      setLoading(false);
-      return;
-    }
-
-    const memberUsernames = teamMembers.split(',').map(name => name.trim()).filter(name => name);
-    const groupSlugs = groups.split(',').map((g) => g.trim()).filter(Boolean);
-
-    if (memberUsernames.length === 0 && groupSlugs.length === 0) {
-      setError('Enter at least one team member (username) or one group (GitHub team slug).');
-      setLoading(false);
-      return;
-    }
-
+  async function act(action: string, fields: Record<string, unknown> = {}) {
+    setBusy(action); setError(''); setMessage('');
     try {
-      const { pullRequests, teamSearchWarning } = await getPullRequestsWithMatch(
-        organization,
-        memberUsernames,
-        groupSlugs,
-        pat,
-        new Date(lastDate)
-      );
+      const response = await fetch('/api/tracked', { method: 'POST', headers: {
+        'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      }, body: JSON.stringify({ action, ...fields }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+      updateList(data);
+      return true;
+    } catch (error) { setError(error instanceof Error ? error.message : 'Request failed. Try again.'); return false; }
+    finally { setBusy(''); }
+  }
 
-      setPullRequests(pullRequests);
+  async function add(value: string) { await act('add', { text: value }); }
+  const disabled = Boolean(busy) || initialLoading;
+  const mine = pullRequests.filter((pr) => pr.author.toLowerCase() === viewer.toLowerCase());
+  const others = pullRequests.filter((pr) => pr.author.toLowerCase() !== viewer.toLowerCase());
+  const trackedUrls = new Set(pullRequests.map((pr) => pr.url.toLowerCase()));
+  const unseenCount = pullRequests.filter((pr) => pr.unseen).length;
 
-      if (pullRequests.length === 0) {
-        const noResults =
-          'No open pull requests found for the specified users and/or groups in the given organization.';
-        setMessage(
-          teamSearchWarning ? `${teamSearchWarning} ${noResults}` : noResults
-        );
-      } else {
-        setMessage(teamSearchWarning || '');
-      }
-
-    } catch (err: any) {
-      setError(`Error: ${err.message}. Please check your PAT and inputs.`);
-      console.error('GitHub API error:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div style={{ 
-      minHeight: '100vh', 
-      background: 'var(--background)', 
-      padding: 'var(--spacing-4)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center'
-    }}>
-      <div className="card" style={{ 
-        padding: 'var(--spacing-8)', 
-        width: '100%', 
-        maxWidth: '64rem'
-      }}>
-        <h1 style={{ 
-          fontSize: '1.875rem', 
-          fontWeight: 'bold', 
-          textAlign: 'center', 
-          color: 'var(--foreground)', 
-          marginBottom: 'var(--spacing-6)'
-        }}>
-          GitHub Pull Request Lister
-        </h1>
-
-        <div style={{ 
-          display: 'grid', 
-          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', 
-          gap: 'var(--spacing-6)', 
-          marginBottom: 'var(--spacing-6)'
-        }}>
-          <InputField
-            id="pat"
-            label="GitHub Personal Access Token (PAT):"
-            type="password"
-            value={pat}
-            onChange={(e) => setPat(e.target.value)}
-            placeholder="e.g., ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-            description="Requires 'repo' scope for private repositories. Create one in GitHub Settings > Developer settings > Personal access tokens."
-            required
-          />
-
-          <InputField
-            id="organization"
-            label="GitHub Organization (Optional):"
-            type="text"
-            value={organization}
-            onChange={(e) => setOrganization(e.target.value)}
-            placeholder="e.g., octocat"
-            description="If specified, lists PRs across all repos in this organization."
-          />
-
-          <InputField
-            id="teamMembers"
-            label="Team Members (GitHub Usernames, comma-separated):"
-            type="text"
-            value={teamMembers}
-            onChange={(e) => setTeamMembers(e.target.value)}
-            placeholder="e.g., user1, user2, user3"
-            description="Only PRs opened by these users will be listed."
-          />
-
-          <InputField
-            id="groups"
-            label="Groups (comma-separated):"
-            type="text"
-            value={groups}
-            onChange={(e) => setGroups(e.target.value)}
-            placeholder="e.g., engineering, security"
-            description="Optional. Org team slugs or org/team paths. Matches PRs with that team requested for review (search needs read:org on your PAT)."
-          />
-
-          <DateField
-            id="lastDate"
-            label="Search PRs created after:"
-            value={lastDate}
-            onChange={(e) => setLastDate(e.target.value)}
-            description="Only pull requests created after this date will be shown. Defaults to yesterday if left empty."
-            max={todayDate} // Don't allow future dates
-          />
-        </div>
-
-        <div style={{ 
-          display: 'flex', 
-          justifyContent: 'center', 
-          marginBottom: 'var(--spacing-6)'
-        }}>
-          <button
-            onClick={fetchGitHubData}
-            className="button button-primary"
-            disabled={loading}
-            style={{
-              padding: 'var(--spacing-2) var(--spacing-6)',
-              fontSize: '0.875rem',
-              fontWeight: '600'
-            }}
-          >
-            {loading ? 'Fetching PRs...' : 'Get Pull Requests'}
-          </button>
-        </div>
-
-        {error && (
-          <div className="alert alert-error">
-            <strong style={{ fontWeight: 'bold' }}>Error!</strong>
-            <span style={{ display: 'block' }}>{error}</span>
+  function cards(title: string, items: TrackedCard[], empty: string) {
+    return <section className="tracked-section" aria-label={title}>
+      <h2>{title} <span className="count">{items.length}</span></h2>
+      {items.length === 0 ? <p className="empty-state">{empty}</p> : <ul className="pr-list">
+        {items.map((pr) => <li key={pr.key} className={`pr-row${pr.unseen ? ' pr-unseen' : ''}`}>
+          <div className="pr-details">
+            <a className="pr-title link" href={pr.url} target="_blank" rel="noopener noreferrer">{pr.title}
+              {pr.unseen && <span className="activity-badge">Unseen changes</span>}
+            </a>
+            <div className="pr-meta"><span>{pr.owner}/{pr.repo} #{pr.number}</span><span>by {pr.author || 'deleted user'}</span><span className={`pr-status pr-status-${pr.status.toLowerCase()}`}>{pr.status}</span></div>
+            <p className="retrieval-time">Last retrieved <time dateTime={pr.retrievedAt}>{new Date(pr.retrievedAt).toLocaleString()}</time></p>
+            {pr.error && <p role="alert" className="pr-error">Could not refresh: {pr.error}</p>}
           </div>
-        )}
-
-        {message && (
-          <div className="alert alert-warning">
-            <strong style={{ fontWeight: 'bold' }}>Info!</strong>
-            <span style={{ display: 'block' }}>{message}</span>
+          <div className="pr-actions">
+            <button className="button button-secondary" disabled={disabled || !pr.unseen} onClick={() => void act('seen', { key: pr.key, revision: pr.revision })}>{pr.unseen ? 'Mark as seen' : 'Seen'}</button>
+            <button className="button remove-button" disabled={disabled} onClick={() => setRemoving(pr)} aria-label={`Remove ${pr.title}`}>Remove</button>
           </div>
-        )}
+        </li>)}
+      </ul>}
+    </section>;
+  }
 
-        <PullRequestsList pullRequests={pullRequests} />
+  return <main className="workspace">
+    <header className="workspace-header"><div><h1>Pull request review list</h1><p className="muted">Keep the PRs you’re ready to follow.</p></div>{viewer && <span className="viewer">Signed in as {viewer}</span>}</header>
+    <details className="settings" open={settingsOpen} onToggle={(event) => setSettingsOpen(event.currentTarget.open)}>
+      <summary>Settings</summary>
+      <div className="settings-content"><InputField id="token" label="GitHub personal access token" type="password" value={token} onChange={(event) => setToken(event.target.value)} placeholder={config?.hasToken ? 'Using configured token; enter to override' : 'Enter your token'} description="Used for this browser session. Your GitHub identity determines which PRs are yours." />
+        {config?.hasToken && <p className="muted">A token is configured on the local server.</p>}
       </div>
+    </details>
+    <nav className="view-tabs" aria-label="PR views"><button className={tab === 'tracked' ? 'active' : ''} aria-current={tab === 'tracked' ? 'page' : undefined} onClick={() => setTab('tracked')}>My View <span className="count">{unseenCount}</span></button><button className={tab === 'discover' ? 'active' : ''} aria-current={tab === 'discover' ? 'page' : undefined} onClick={() => setTab('discover')}>Discover</button></nav>
+    {error && <p className="alert alert-error" role="alert">{error}</p>}
+    {message && <p className="feedback" role="status">{message}</p>}
+    {initialLoading && <p role="status" className="loading-message"><span className="spinner" aria-hidden="true" />Loading saved PRs…</p>}
+    <div hidden={tab !== 'tracked'}>
+      <div className="list-toolbar"><p className="muted">{pullRequests.length} tracked PR{pullRequests.length === 1 ? '' : 's'}. Updates appear after refresh.</p><button className="button button-primary" disabled={disabled || !pullRequests.length} onClick={() => void act('refresh')}>{busy === 'refresh' && <span className="spinner" aria-hidden="true" />}{busy === 'refresh' ? 'Refreshing…' : 'Refresh'}</button></div>
+      <form className="paste-form" onSubmit={(event) => { event.preventDefault(); void add(text); }}>
+        <label className="label" htmlFor="paste">Add PRs from Slack or any text</label><textarea id="paste" className="input" rows={3} value={text} onChange={(event) => setText(event.target.value)} placeholder="Paste a message containing GitHub pull request links…" />
+        <button className="button button-secondary" disabled={disabled || !text.trim()} type="submit">{busy === 'add' && <span className="spinner" aria-hidden="true" />}{busy === 'add' ? 'Adding…' : 'Add to My View'}</button>
+      </form>
+      <div aria-busy={busy === 'refresh'}>{cards('My PRs', mine, 'PRs you opened will appear here when you add them.')}{cards('Others’ PRs', others, 'Paste PR links above or add PRs from Discover.')}</div>
     </div>
-  );
+    {config && <div hidden={tab !== 'discover'}><Discover settings={config} token={token} trackedUrls={trackedUrls} busy={disabled} onAdd={add} /></div>}
+    {busy && <p className="operation-status" role="status">{busy === 'refresh' ? 'Retrieving current activity from GitHub…' : busy === 'add' ? 'Retrieving PRs from GitHub…' : 'Saving your list…'}</p>}
+    {removing && <RemoveConfirmation pr={removing} busy={disabled} onCancel={() => setRemoving(null)} onConfirm={async () => {
+      if (await act('remove', { key: removing.key })) setRemoving(null);
+    }} />}
+  </main>;
 }

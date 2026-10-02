@@ -4,7 +4,11 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "3000:3000"
+      - "3100:3000"
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
     environment:
       - NODE_ENV=production
       - NEXT_TELEMETRY_DISABLED=1
@@ -22,9 +26,14 @@ services:
       - .:/app
       - /app/node_modules
       - /app/.next
+    env_file:
+      - .env
     environment:
       - NODE_ENV=development
     command: npm run dev
     profiles:
       - dev
     container_name: githubprs-dev 
+
+volumes:
+  pr-data:

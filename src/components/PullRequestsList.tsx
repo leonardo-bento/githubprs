@@ -2,9 +2,12 @@ import { ListedPullRequest } from '../services/github';
 
 interface PullRequestsListProps {
   pullRequests: ListedPullRequest[];
+  onAdd?: (url: string) => Promise<void>;
+  trackedUrls?: Set<string>;
+  busy?: boolean;
 }
 
-export default function PullRequestsList({ pullRequests }: PullRequestsListProps) {
+export default function PullRequestsList({ pullRequests, onAdd, trackedUrls, busy }: PullRequestsListProps) {
   if (pullRequests.length === 0) {
     return null;
   }
@@ -30,8 +33,10 @@ export default function PullRequestsList({ pullRequests }: PullRequestsListProps
               <th>Repository</th>
               <th>Author</th>
               <th>Match</th>
+              <th>Involvement</th>
               <th>State</th>
               <th>Created At</th>
+              {onAdd && <th>My View</th>}
             </tr>
           </thead>
           <tbody>
@@ -73,6 +78,13 @@ export default function PullRequestsList({ pullRequests }: PullRequestsListProps
                 </td>
                 <td style={{ fontSize: '0.875rem' }}>{pr.matchSource}</td>
                 <td>
+                  {pr.involved ? (
+                    <span className="status-badge involved-badge">Involved</span>
+                  ) : (
+                    <span style={{ color: 'var(--muted-foreground)' }}>—</span>
+                  )}
+                </td>
+                <td>
                   <span className={`status-badge status-${pr.state}`}>
                     {pr.state}
                   </span>
@@ -92,6 +104,7 @@ export default function PullRequestsList({ pullRequests }: PullRequestsListProps
                     })}
                   </time>
                 </td>
+                {onAdd && <td><button className="button button-secondary" disabled={busy || trackedUrls?.has(pr.html_url.toLowerCase())} onClick={() => void onAdd(pr.html_url)}>{trackedUrls?.has(pr.html_url.toLowerCase()) ? 'Added' : 'Add to My View'}</button></td>}
               </tr>
             ))}
           </tbody>

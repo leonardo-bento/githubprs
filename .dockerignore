@@ -40,3 +40,7 @@ coverage/
 # Temporary folders
 tmp/
 temp/ 
+
+# Personal credentials and tracking state stay outside the image
+.env*
+data/

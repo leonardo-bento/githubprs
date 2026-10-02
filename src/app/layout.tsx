@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "GitHub Pull Request Lister",
-  description: "List GitHub pull requests by team members",
+  title: "Pull request review list",
+  description: "Track selected GitHub pull requests and new review activity",
 };
 
 export default function RootLayout({

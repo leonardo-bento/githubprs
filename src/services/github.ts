@@ -18,6 +18,8 @@ export type MatchSource = 'Person' | 'Group' | 'Person and Group';
 
 export interface ListedPullRequest extends PullRequest {
   matchSource: MatchSource;
+  /** True when the viewer (viewerUsername) participated in the PR: reviewer, review-requested, mentioned, commenter, assignee or author. */
+  involved?: boolean;
 }
 
 export interface GitHubSearchResponse {
@@ -74,7 +76,7 @@ const fetchAllSearchPages = async (query: string, pat: string): Promise<PullRequ
 
   while (hasNextPage) {
     const pullsUrl = `https://api.github.com/search/issues?q=${encodeURIComponent(query)}&per_page=100&page=${page}`;
-    const response = await fetch(pullsUrl, { headers: getHeaders(pat) });
+    const response = await fetch(pullsUrl, { headers: getHeaders(pat), cache: 'no-store', signal: AbortSignal.timeout(30_000) });
 
     if (!response.ok) {
       const detail = await readGitHubErrorMessage(response);
@@ -128,7 +130,8 @@ function teamReviewQualifier(slug: string, organization: string): string {
 
 function mergeByMatchSource(
   byUser: Map<number, PullRequest>,
-  byGroup: Map<number, PullRequest>
+  byGroup: Map<number, PullRequest>,
+  involvedIds?: Set<number>
 ): ListedPullRequest[] {
   const ids = new Set<number>([...byUser.keys(), ...byGroup.keys()]);
   const merged: ListedPullRequest[] = [];
@@ -144,7 +147,7 @@ function mergeByMatchSource(
     else if (fromUser) matchSource = 'Person';
     else matchSource = 'Group';
 
-    merged.push({ ...pr, matchSource });
+    merged.push({ ...pr, matchSource, involved: involvedIds?.has(id) ?? false });
   }
 
   merged.sort(
@@ -170,7 +173,8 @@ export const getPullRequestsWithMatch = async (
   memberUsernames: string[],
   groupSlugs: string[],
   pat: string,
-  lastDate: Date
+  lastDate: Date,
+  viewerUsername?: string
 ): Promise<PullRequestsWithMatchResult> => {
   const org = normalizeOrgLogin(organization);
   const lastDateStr = lastDate.toISOString().split('T')[0];
@@ -221,8 +225,27 @@ export const getPullRequestsWithMatch = async (
     }
   }
 
+  // Mark PRs the viewer personally participated in (reviewer, review-requested,
+  // mentioned, commenter, assignee or author — all covered by `involves:`).
+  let involvedIds: Set<number> | undefined;
+  const viewer = stripAt(viewerUsername ?? '');
+
+  if (viewer) {
+    const outcome = await tryFetchAllSearchPages(`${base} involves:${viewer}`, pat);
+    if (outcome.ok) {
+      involvedIds = new Set(outcome.items.map((pr) => pr.id));
+    } else {
+      const involvementWarning =
+        `Involvement search failed (${outcome.message}). ` +
+        `The "Involved" badges may be missing for this run.`;
+      teamSearchWarning = teamSearchWarning
+        ? `${teamSearchWarning} ${involvementWarning}`
+        : involvementWarning;
+    }
+  }
+
   return {
-    pullRequests: mergeByMatchSource(byUser, byGroup),
+    pullRequests: mergeByMatchSource(byUser, byGroup, involvedIds),
     teamSearchWarning,
   };
 };
