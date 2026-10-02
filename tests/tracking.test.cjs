@@ -86,3 +86,12 @@ test('a reply in the same timestamp second as the viewer question is detected by
   const thread = { id: 't', resolved: false, resolvedBy: '', comments: [comment('question', 'me')] };
   assert.equal(hasRelevantChanges(snapshot({ threads: [thread] }), snapshot({ threads: [{ ...thread, comments: [...thread.comments, comment('answer')] }] }), 'me'), true);
 });
+
+test('cards expose saved involvement and refresh can clear it without creating unseen activity', () => {
+  const tracked = pr({ snapshot: snapshot({ involved: true }), seenRevision: 1 });
+  assert.equal(toCard(tracked).involved, true);
+  const updated = applySnapshot(tracked, snapshot({ involved: false }), 'me');
+  assert.equal(toCard(updated).involved, false);
+  assert.equal(toCard(updated).unseen, false);
+  assert.equal(toCard(pr()).involved, undefined);
+});

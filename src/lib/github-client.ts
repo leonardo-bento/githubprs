@@ -6,7 +6,7 @@ type Comment = { id: string; author: { login: string } | null; createdAt: string
 type Review = Comment & { body: string; state: string };
 type Thread = { id: string; isResolved: boolean; resolvedBy: { login: string } | null; comments: Connection<Comment> };
 type Pull = {
-  title: string; author: { login: string } | null; state: 'OPEN' | 'CLOSED' | 'MERGED';
+  viewerLatestReviewRequest: { id: string } | null; title: string; author: { login: string } | null; state: 'OPEN' | 'CLOSED' | 'MERGED';
   isDraft: boolean; headRefOid: string; comments: Connection<Comment>; reviews: Connection<Review>; reviewThreads: Connection<Thread>;
 };
 const pageInfo = 'pageInfo { hasNextPage endCursor }';
@@ -41,10 +41,12 @@ async function allComments(pat: string, nodeId: string, kind: 'PullRequest' | 'P
 }
 
 export async function fetchSnapshot(reference: PRReference, pat: string): Promise<PRSnapshot> {
-  const result = await graphql<{ repository: { pullRequest: (Pull & { id: string }) | null } | null }>(pat,
+  const result = await graphql<{ viewer: { login: string }; repository: { pullRequest: (Pull & { id: string }) | null } | null }>(pat,
     `query($owner: String!, $repo: String!, $number: Int!) {
+      viewer { login }
       repository(owner: $owner, name: $repo) { pullRequest(number: $number) {
         id title author { login } state isDraft headRefOid
+        viewerLatestReviewRequest { id }
         comments(first: 100) { nodes { ${commentFields} } ${pageInfo} }
         reviews(first: 100) { nodes { ${commentFields} body state } ${pageInfo} }
         reviewThreads(first: 100) { nodes { ${threadFields} } ${pageInfo} }
@@ -83,7 +85,13 @@ export async function fetchSnapshot(reference: PRReference, pat: string): Promis
     snapshots.push({ id: thread.id, resolved: thread.isResolved, resolvedBy: thread.resolvedBy?.login ?? '',
       comments: await allComments(pat, thread.id, 'PullRequestReviewThread', thread.comments) });
   }
-  return { title: pull.title, author: pull.author?.login ?? '',
+  const isViewer = (login: string) => login.toLowerCase() === result.viewer.login.toLowerCase();
+  const involved = Boolean(pull.viewerLatestReviewRequest)
+    || isViewer(pull.author?.login ?? '')
+    || comments.some((comment) => isViewer(comment.author))
+    || reviews.some((review) => review.state !== 'PENDING' && isViewer(review.author?.login ?? ''))
+    || snapshots.some((thread) => thread.comments.some((comment) => isViewer(comment.author)));
+  return { involved, title: pull.title, author: pull.author?.login ?? '',
     status: pull.state === 'MERGED' ? 'Merged' : pull.state === 'CLOSED' ? 'Closed' : pull.isDraft ? 'Draft' : 'Open',
     headSha: pull.headRefOid, comments, threads: snapshots, retrievedAt: new Date().toISOString() };
 }

@@ -11,6 +11,7 @@ export interface ThreadSnapshot {
   comments: CommentSnapshot[];
 }
 export interface PRSnapshot {
+  involved?: boolean;
   title: string;
   author: string;
   status: PRStatus;
@@ -34,6 +35,7 @@ export interface TrackedPR extends PRReference {
   error?: string;
 }
 export interface TrackedCard extends PRReference {
+  involved?: boolean;
   title: string;
   author: string;
   status: PRStatus;
@@ -98,5 +100,5 @@ export function acknowledge(pr: TrackedPR, revision: number): TrackedPR {
 export function toCard(pr: TrackedPR): TrackedCard {
   const { snapshot, seenRevision, addedAt: _addedAt, ...rest } = pr;
   return { ...rest, title: snapshot.title, author: snapshot.author, status: snapshot.status,
-    retrievedAt: snapshot.retrievedAt, unseen: pr.revision > seenRevision };
+    involved: snapshot.involved, retrievedAt: snapshot.retrievedAt, unseen: pr.revision > seenRevision };
 }

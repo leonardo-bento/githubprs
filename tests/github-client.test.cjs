@@ -7,7 +7,7 @@ const reference = extractPRs('https://github.com/org/repo/pull/1')[0];
 const page = (nodes, more = false) => ({ nodes, pageInfo: { hasNextPage: more, endCursor: more ? 'cursor' : null } });
 const comment = (id) => ({ id, author: { login: 'me' }, createdAt: '2026-10-01T12:00:00Z' });
 const thread = (id, more = false) => ({ id, isResolved: false, resolvedBy: null, comments: page([comment(`${id}-comment`)], more) });
-const pull = (overrides = {}) => ({ id: 'pull', title: 'Feature', author: { login: 'me' }, state: 'OPEN', isDraft: false, headRefOid: 'sha',
+const pull = (overrides = {}) => ({ id: 'pull', viewerLatestReviewRequest: null, title: 'Feature', author: { login: 'me' }, state: 'OPEN', isDraft: false, headRefOid: 'sha',
   comments: page([]), reviews: page([]), reviewThreads: page([]), ...overrides });
 
 function response(data, status = 200) { return new Response(JSON.stringify(data), { status }); }
@@ -21,7 +21,7 @@ test('retrieves all pages of comments, review summaries, threads and nested repl
     assert.equal(init.cache, 'no-store');
     const { query, variables } = JSON.parse(init.body);
     requests.push(variables);
-    if (query.includes('repository(owner:')) return response({ data: { repository: { pullRequest: pull({
+    if (query.includes('repository(owner:')) return response({ data: { viewer: { login: 'me' }, repository: { pullRequest: pull({
       comments: page([comment('c1')], true), reviews: page([{ ...comment('r1'), body: '', state: 'APPROVED' }], true),
       reviewThreads: page([thread('t1', true)], true),
     }) } } });
@@ -40,6 +40,7 @@ test('retrieves all pages of comments, review summaries, threads and nested repl
     assert.deepEqual(snapshot.threads.map((t) => t.id), ['t1', 't2']);
     assert.deepEqual(snapshot.threads[0].comments.map((c) => c.id), ['t1-comment', 'reply']);
     assert.equal(requests.length, 5);
+    assert.equal(snapshot.involved, true);
     assert.equal(snapshot.status, 'Open');
     assert.ok(!Number.isNaN(Date.parse(snapshot.retrievedAt)));
   } finally { global.fetch = original; }
@@ -48,7 +49,7 @@ test('maps draft, closed and merged states correctly', async () => {
   const original = global.fetch;
   try {
     for (const [state, isDraft, status] of [['OPEN', true, 'Draft'], ['CLOSED', true, 'Closed'], ['MERGED', false, 'Merged']]) {
-      global.fetch = async () => response({ data: { repository: { pullRequest: pull({ state, isDraft }) } } });
+      global.fetch = async (url, init) => response({ data: { viewer: { login: 'me' }, repository: { pullRequest: pull({ state, isDraft }) } } });
       assert.equal((await fetchSnapshot(reference, 'token')).status, status);
     }
   } finally { global.fetch = original; }
@@ -56,11 +57,11 @@ test('maps draft, closed and merged states correctly', async () => {
 test('fails on partial GraphQL errors rather than storing incomplete snapshots', async () => {
   const original = global.fetch;
   try {
-    global.fetch = async () => response({ data: { repository: { pullRequest: pull() } }, errors: [{ message: 'Rate limited' }] });
+    global.fetch = async () => response({ data: { viewer: { login: 'me' }, repository: { pullRequest: pull() } }, errors: [{ message: 'Rate limited' }] });
     await assert.rejects(fetchSnapshot(reference, 'token'), /Rate limited/);
     global.fetch = async () => response({ message: 'Bad credentials' }, 401);
     await assert.rejects(fetchSnapshot(reference, 'token'), /Bad credentials/);
-    global.fetch = async () => response({ data: { repository: null } });
+    global.fetch = async () => response({ data: { viewer: { login: 'me' }, repository: null } });
     await assert.rejects(fetchSnapshot(reference, 'token'), /not found/);
   } finally { global.fetch = original; }
 });
@@ -68,4 +69,28 @@ test('uses the authenticated GitHub identity', async () => {
   const original = global.fetch;
   global.fetch = async () => response({ data: { viewer: { login: 'actual-user' } } });
   try { assert.equal(await fetchViewer('token'), 'actual-user'); } finally { global.fetch = original; }
+});
+
+test('involvement detects requested reviewers, comments, inline replies and empty submitted reviews', async () => {
+  const original = global.fetch;
+  try {
+    const cases = [
+      [{}, false],
+      [{ viewerLatestReviewRequest: { id: 'request' } }, true],
+      [{ comments: page([comment('comment')]) }, true],
+      [{ reviewThreads: page([thread('thread')]) }, true],
+      [{ reviews: page([{ ...comment('approval'), body: '', state: 'APPROVED' }]) }, true],
+      [{ reviews: page([{ ...comment('draft'), body: 'Draft', state: 'PENDING' }]) }, false],
+      [{ comments: page([{ ...comment('other'), author: { login: 'other' } }]) }, false],
+      [{ comments: page([{ ...comment('case'), author: { login: 'ME' } }]) }, true],
+    ];
+    for (const [overrides, expected] of cases) {
+      global.fetch = async (url, init) => {
+        const { query } = JSON.parse(init.body);
+        assert.ok(query.includes('viewerLatestReviewRequest { id }'));
+        return response({ data: { viewer: { login: 'me' }, repository: { pullRequest: pull({ author: { login: 'owner' }, ...overrides }) } } });
+      };
+      assert.equal((await fetchSnapshot(reference, 'token')).involved, expected);
+    }
+  } finally { global.fetch = original; }
 });
