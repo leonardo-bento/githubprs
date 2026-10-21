@@ -10,6 +10,32 @@ const snapshot = (author = 'me', overrides = {}) => ({ title: 'PR', author, stat
 const github = { viewer: async () => 'me', snapshot: async (ref) => snapshot(ref.number === 1 ? 'me' : 'teammate') };
 const links = 'Slack message: <https://github.com/org/repo/pull/1|my PR> https://github.com/org/repo/pull/2';
 
+test('notification batches follow refresh activity only, including further changes to already-unseen PRs', async () => {
+  const store = state();
+  let result = await runTrackingAction(store, { action: 'add', text: links }, github);
+  assert.equal(result.activityRevision, 0);
+  result = await runTrackingAction(store, { action: 'refresh' }, github);
+  assert.equal(result.activityRevision, 0);
+  const changed = { ...github, snapshot: async () => snapshot('teammate', { headSha: 'changed' }) };
+  result = await runTrackingAction(store, { action: 'refresh' }, changed);
+  const first = result.activityRevision;
+  assert.ok(first > 0);
+  result = await runTrackingAction(store, { action: 'refresh' }, changed);
+  assert.equal(result.activityRevision, first);
+  result = await runTrackingAction(store, { action: 'refresh' }, { ...changed, snapshot: async (ref) => {
+    if (ref.number === 1) throw new Error('No access');
+    return snapshot('teammate', { headSha: 'changed-again' });
+  } }, () => {});
+  assert.ok(result.activityRevision > first);
+  const second = result.activityRevision;
+  result = await runTrackingAction(store, { action: 'refresh' }, { ...github, snapshot: async () => { throw new Error('Offline'); } }, () => {});
+  assert.equal(result.activityRevision, second);
+  result = await runTrackingAction(store, { action: 'seen', key: result.pullRequests[0].key, revision: result.pullRequests[0].revision }, github);
+  assert.equal(result.activityRevision, second);
+  result = await runTrackingAction(store, { action: 'remove', key: result.pullRequests[0].key }, github);
+  assert.equal(result.activityRevision, second);
+});
+
 test('add, deduplicate, mark seen, refresh and remove complete lifecycle', async () => {
   const store = state();
   let result = await runTrackingAction(store, { action: 'add', text: links }, github);

@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
+import { serverToken } from './server-token';
 
 export type LogContext = Record<string, string | number | boolean | undefined>;
 
 function redact(text: string): string {
   let result = text.replace(/Bearer\s+[^\s"']+/gi, 'Bearer [redacted]')
     .replace(/\b(?:gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+)\b/g, '[redacted]');
-  for (const token of [process.env.GITHUB_PAT, process.env.NEXT_PUBLIC_PAT]) {
+  for (const token of [process.env.GITHUB_PAT, process.env.NEXT_PUBLIC_PAT, serverToken()]) {
     if (token) result = result.split(token).join('[redacted]');
   }
   return result;

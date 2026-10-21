@@ -13,7 +13,7 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Open http://localhost:3000. You can also enter a token in **Settings** for the current browser session. Your identity comes from the authenticated GitHub account, so PRs are automatically separated into **My PRs** and **Others’ PRs**.
+Open http://localhost:3000. You can also enter a token in **Settings** and choose **Save token for auto-refresh**. When no environment token is configured, the server validates and keeps that token in memory until restart. After a restart, open the frontend and save it again. Your identity comes from the authenticated GitHub account, so PRs are automatically separated into **My PRs** and **Others’ PRs**.
 
 `GITHUB_PAT` is read on the server. Existing `NEXT_PUBLIC_PAT`, `NEXT_PUBLIC_USERS`, `NEXT_PUBLIC_GROUPS`, and `NEXT_PUBLIC_ORGANIZATION` configurations still work as server-side fallbacks. Prefer the new names; tokens are never returned by the configuration endpoint or stored in the tracking JSON.
 
@@ -23,7 +23,9 @@ The token needs access to the repositories you track. Team discovery also needs 
 
 - **My View:** paste a Slack message or other text containing PR URLs. Multiple links, Slack-formatted links, `/files` links, and duplicates are handled. New additions start unseen.
 - **Discover:** search open PRs by author usernames and/or teams requested for review. Choose **Add to My View** on the PRs you want to track. The existing involvement filter remains available.
-- **Refresh:** retrieve current GitHub activity manually. A spinner indicates the update is running. Opening the app only loads the saved list; it does not refresh GitHub.
+- **Refresh:** retrieve current GitHub activity manually. A spinner indicates the update is running. Opening the app loads the saved list.
+- **Auto-refresh:** the running server refreshes tracked PRs every 10 minutes, beginning 10 minutes after server startup. It uses the configured environment token or a token saved through Settings. It keeps running with the page closed. Long-running automatic refreshes skip overlapping scheduled ticks; failures retry at the next scheduled tick. Run one server per data directory.
+- **OS notifications:** choose **Enable OS notifications** in Settings and allow the browser permission. While the page stays open (including in a background tab), it synchronizes saved results about every 15 seconds and updates the cards automatically. Each refresh that finds relevant new activity produces one generic notification: “GitHub PRs: News from your PRs.” Manual refreshes use the same notification rules. Existing unseen activity, additions, errors, and reopening the page do not trigger notifications. Notifications focus the app when clicked and leave PRs unseen. Browser locks and local storage prevent duplicate notifications across tabs when available; browsers that restrict these features use best-effort delivery. Notifications require browser support and a secure context, such as localhost or HTTPS; browser suspension can delay synchronization.
 - **Unseen changes:** one badge signals activity. Clicking the PR opens GitHub in a new tab without clearing the badge.
 - **Mark as seen:** acknowledges only activity already retrieved and displayed. A subsequent comment or change appears after the next refresh. Stale browser acknowledgments cannot clear a newer retrieved event.
 - **Remove:** requires confirmation. Closed and merged PRs remain tracked until you remove them.
@@ -32,11 +34,11 @@ My PRs flag new general comments, inline review comments, and review summaries w
 
 Both sections flag new approvals from other people, including approvals without comments and repeat approvals. Your own approvals do not flag activity. For PRs saved before approval tracking was introduced, the first successful refresh establishes the approval baseline without flagging existing approvals; later approvals trigger activity as usual.
 
-Both sections also flag Draft → Open and transitions to Closed or Merged. Open → Draft and Closed → Open are ignored. Changes are compared between manual retrievals; an event that occurs and reverses entirely between refreshes may not be observed.
+Both sections also flag Draft → Open and transitions to Closed or Merged. Open → Draft and Closed → Open are ignored. Changes are compared between retrievals; an event that occurs and reverses entirely between refreshes may not be observed.
 
 ## Local storage
 
-State is saved atomically in `data/tracked-prs.json`, ignored by Git. It includes the tracked list, last successful retrieval per PR, conversation identifiers, and acknowledgment revisions. Comment bodies and tokens are not stored. Refresh failures retain saved activity and show an error on the affected card.
+State is saved atomically in `data/tracked-prs.json`, ignored by Git. It includes the tracked list, last successful retrieval per PR, conversation identifiers, acknowledgment revisions, and the latest refresh activity revision used for notifications. Comment bodies and tokens are not stored. Refresh failures retain saved activity and show an error on the affected card.
 
 Set `PR_DATA_DIR` to change the storage directory. Run one app server per data directory; writes within that server are serialized. The list belongs to the first authenticated account used to add PRs. Switching accounts with a nonempty list is rejected so activity stays associated with the right person.
 

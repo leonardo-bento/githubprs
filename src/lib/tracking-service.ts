@@ -42,17 +42,24 @@ export async function runTrackingAction(store: TrackingStore, body: TrackingActi
       message = `${added} PR${added === 1 ? '' : 's'} added.${duplicates ? ` ${duplicates} already tracked.` : ''}${failures.length ? ` Could not add: ${failures.join(' ')}` : ''}`;
     } else {
       let failed = 0;
+      let changed = false;
       for (let index = 0; index < store.pullRequests.length; index++) {
         const pr = store.pullRequests[index];
-        try { store.pullRequests[index] = applySnapshot(pr, await github.snapshot(pr), viewer); }
+        try {
+          store.pullRequests[index] = applySnapshot(pr, await github.snapshot(pr), viewer);
+          changed ||= store.pullRequests[index].revision > pr.revision;
+        }
         catch (error) {
           onError(error, pr);
           store.pullRequests[index] = { ...pr, error: error instanceof Error ? error.message : 'Could not refresh PR.' };
           failed++;
         }
       }
+      // Only refresh activity creates a notification batch, including changes
+      // to PRs that were already unseen. Additions and acknowledgments do not.
+      if (changed) store.activityRevision = Math.max(Date.now(), (store.activityRevision ?? 0) + 1);
       message = failed ? `${failed} PR${failed === 1 ? '' : 's'} could not be refreshed. Saved activity was preserved.` : 'List refreshed.';
     }
   }
-  return { viewer: store.viewer, pullRequests: store.pullRequests.map(toCard), message };
+  return { viewer: store.viewer, pullRequests: store.pullRequests.map(toCard), activityRevision: store.activityRevision ?? 0, message };
 }

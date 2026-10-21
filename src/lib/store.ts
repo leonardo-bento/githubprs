@@ -6,6 +6,7 @@ export interface TrackingStore {
   version: 1;
   viewer: string;
   pullRequests: TrackedPR[];
+  activityRevision?: number;
 }
 
 // Share the mutation queue across route modules and development reloads.

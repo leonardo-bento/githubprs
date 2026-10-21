@@ -1,9 +1,10 @@
 import { startRequestLog } from './request-log';
 import type { RequestLog } from './request-log';
+import { serverToken } from './server-token';
 
 export function tokenFor(request: Request): string {
   const token = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '').trim()
-    || process.env.GITHUB_PAT || process.env.NEXT_PUBLIC_PAT || '';
+    || serverToken();
   if (!token) throw new Error('Enter a GitHub token in Settings or set GITHUB_PAT in .env.local.');
   return token;
 }

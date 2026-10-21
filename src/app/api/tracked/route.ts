@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: Request) {
   return loggedApi(request, async () => {
     const store = await readStore();
-    return NextResponse.json({ viewer: store.viewer, pullRequests: store.pullRequests.map(toCard) });
+    return NextResponse.json({ viewer: store.viewer, pullRequests: store.pullRequests.map(toCard), activityRevision: store.activityRevision ?? 0 });
   });
 }
 
