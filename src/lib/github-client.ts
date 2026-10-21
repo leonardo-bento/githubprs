@@ -79,6 +79,9 @@ export async function fetchSnapshot(reference: PRReference, pat: string): Promis
   comments.push(...reviews.filter((review) => review.state !== 'PENDING' && review.body.trim()).map((review) => ({
     id: review.id, author: review.author?.login ?? '', createdAt: review.createdAt,
   })));
+  const approvals = reviews.filter((review) => review.state === 'APPROVED').map((review) => ({
+    id: review.id, author: review.author?.login ?? '', createdAt: review.createdAt,
+  }));
   const snapshots: ThreadSnapshot[] = [];
   // Sequential requests keep large conversations from exhausting GitHub's concurrency allowance.
   for (const thread of threads) {
@@ -93,7 +96,7 @@ export async function fetchSnapshot(reference: PRReference, pat: string): Promis
     || snapshots.some((thread) => thread.comments.some((comment) => isViewer(comment.author)));
   return { involved, title: pull.title, author: pull.author?.login ?? '',
     status: pull.state === 'MERGED' ? 'Merged' : pull.state === 'CLOSED' ? 'Closed' : pull.isDraft ? 'Draft' : 'Open',
-    headSha: pull.headRefOid, comments, threads: snapshots, retrievedAt: new Date().toISOString() };
+    headSha: pull.headRefOid, comments, approvals, threads: snapshots, retrievedAt: new Date().toISOString() };
 }
 
 export async function fetchViewer(pat: string): Promise<string> {

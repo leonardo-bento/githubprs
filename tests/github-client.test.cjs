@@ -29,6 +29,9 @@ test('retrieves all pages of comments, review summaries, threads and nested repl
     if (query.includes('reviews(first:')) return response({ data: { node: { reviews: page([
       { ...comment('r2'), body: 'Please change this', state: 'CHANGES_REQUESTED' },
       { ...comment('r3'), body: 'Not published', state: 'PENDING' },
+      { ...comment('r4'), body: 'Looks good', state: 'APPROVED' },
+      { ...comment('r5'), body: '', state: 'APPROVED' },
+      { ...comment('r6'), body: '', state: 'DISMISSED' },
     ]) } } });
     if (variables.id === 'pull') return response({ data: { node: { comments: page([comment('c2')]) } } });
     if (variables.id === 't1') return response({ data: { node: { comments: page([comment('reply')]) } } });
@@ -36,7 +39,10 @@ test('retrieves all pages of comments, review summaries, threads and nested repl
   };
   try {
     const snapshot = await fetchSnapshot(reference, 'test-token');
-    assert.deepEqual(snapshot.comments.map((c) => c.id), ['c1', 'c2', 'r2']);
+    assert.deepEqual(snapshot.comments.map((c) => c.id), ['c1', 'c2', 'r2', 'r4']);
+    assert.deepEqual(snapshot.approvals, ['r1', 'r4', 'r5'].map((id) => ({
+      id, author: 'me', createdAt: '2026-10-01T12:00:00Z',
+    })));
     assert.deepEqual(snapshot.threads.map((t) => t.id), ['t1', 't2']);
     assert.deepEqual(snapshot.threads[0].comments.map((c) => c.id), ['t1-comment', 'reply']);
     assert.equal(requests.length, 5);

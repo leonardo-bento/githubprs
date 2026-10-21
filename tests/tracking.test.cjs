@@ -5,7 +5,7 @@ const { extractPRs, hasRelevantChanges, applySnapshot, acknowledge, toCard } = r
 
 const comment = (id, author = 'teammate', createdAt = '2026-10-01T10:00:00Z') => ({ id, author, createdAt });
 const snapshot = (overrides = {}) => ({ title: 'Feature', author: 'teammate', status: 'Open', headSha: 'abc',
-  comments: [], threads: [], retrievedAt: '2026-10-01T12:00:00Z', ...overrides });
+  comments: [], threads: [], approvals: [], retrievedAt: '2026-10-01T12:00:00Z', ...overrides });
 const reference = extractPRs('https://github.com/org/repo/pull/123')[0];
 const pr = (overrides = {}) => ({ ...reference, snapshot: snapshot(), revision: 1, seenRevision: 0,
   addedAt: '2026-10-01T12:00:00Z', ...overrides });
@@ -35,6 +35,34 @@ test('new inline comments on My PRs are relevant, unrelated threads on Others PR
 test('Others PRs detect new commits and general comments', () => {
   assert.equal(hasRelevantChanges(snapshot(), snapshot({ headSha: 'def' }), 'me'), true);
   assert.equal(hasRelevantChanges(snapshot(), snapshot({ comments: [comment('1')] }), 'me'), true);
+});
+test('new approvals on any tracked PR flag activity, including repeat approvals by the same reviewer', () => {
+  for (const author of ['me', 'teammate']) {
+    const first = comment('approval-1');
+    const second = comment('approval-2');
+    const before = snapshot({ author });
+    const approved = snapshot({ author, approvals: [first] });
+    assert.equal(hasRelevantChanges(before, approved, 'me'), true);
+    assert.equal(hasRelevantChanges(approved, snapshot({ author, approvals: [first, second] }), 'me'), true);
+    assert.equal(hasRelevantChanges(approved, approved, 'me'), false);
+    assert.equal(hasRelevantChanges(approved, before, 'me'), false);
+    assert.equal(hasRelevantChanges(before, snapshot({ author, approvals: [comment('own', 'Me')] }), 'me'), false);
+  }
+});
+test('legacy snapshots baseline existing approvals while preserving other activity detection', () => {
+  const legacy = snapshot();
+  delete legacy.approvals;
+  const baseline = snapshot({ approvals: [comment('existing')] });
+  let tracked = applySnapshot(pr({ snapshot: legacy, seenRevision: 1 }), baseline, 'me');
+  assert.equal(toCard(tracked).unseen, false);
+  assert.deepEqual(tracked.snapshot.approvals, baseline.approvals);
+  assert.equal(hasRelevantChanges(legacy, { ...baseline, comments: [comment('new-comment')] }, 'me'), true);
+  tracked = applySnapshot(tracked, { ...baseline, approvals: [...baseline.approvals, comment('new')] }, 'me');
+  assert.equal(toCard(tracked).unseen, true);
+  assert.equal(tracked.revision, 2);
+  tracked = acknowledge(tracked, 2);
+  tracked = applySnapshot(tracked, tracked.snapshot, 'me');
+  assert.equal(toCard(tracked).unseen, false);
 });
 test('replies after the viewer joins a thread and its resolution are relevant', () => {
   const thread = { id: 't', resolved: false, resolvedBy: '', comments: [comment('question', 'me')] };

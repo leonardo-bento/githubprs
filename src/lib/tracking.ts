@@ -18,6 +18,8 @@ export interface PRSnapshot {
   headSha: string;
   comments: CommentSnapshot[];
   threads: ThreadSnapshot[];
+  // Missing in snapshots saved before approval tracking; the next refresh establishes a baseline.
+  approvals?: CommentSnapshot[];
   retrievedAt: string;
 }
 export interface PRReference {
@@ -69,6 +71,7 @@ export function hasRelevantChanges(before: PRSnapshot, after: PRSnapshot, viewer
   if (before.status !== after.status && (after.status === 'Closed' || after.status === 'Merged'
     || (before.status === 'Draft' && after.status === 'Open'))) return true;
   if (newCommentsFromOthers(before.comments, after.comments, viewer)) return true;
+  if (before.approvals && newCommentsFromOthers(before.approvals, after.approvals ?? [], viewer)) return true;
   const mine = sameUser(after.author, viewer);
   if (!mine && before.headSha !== after.headSha) return true;
   const oldThreads = new Map(before.threads.map((thread) => [thread.id, thread]));

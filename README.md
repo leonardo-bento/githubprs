@@ -30,7 +30,9 @@ The token needs access to the repositories you track. Team discovery also needs 
 
 My PRs flag new general comments, inline review comments, and review summaries with text from other people. Others’ PRs additionally flag head commit changes, replies posted after you joined a review thread, and resolution of threads you participated in by others. General comments from others also flag activity, to avoid missing answers outside a review thread. Your own comments and thread resolutions do not flag activity.
 
-Both sections flag Draft → Open and transitions to Closed or Merged. Open → Draft and Closed → Open are ignored. Empty approvals are not comments. Changes are compared between manual retrievals; an event that occurs and reverses entirely between refreshes may not be observed.
+Both sections flag new approvals from other people, including approvals without comments and repeat approvals. Your own approvals do not flag activity. For PRs saved before approval tracking was introduced, the first successful refresh establishes the approval baseline without flagging existing approvals; later approvals trigger activity as usual.
+
+Both sections also flag Draft → Open and transitions to Closed or Merged. Open → Draft and Closed → Open are ignored. Changes are compared between manual retrievals; an event that occurs and reverses entirely between refreshes may not be observed.
 
 ## Local storage
 
