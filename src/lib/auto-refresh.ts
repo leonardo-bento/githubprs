@@ -9,13 +9,15 @@ export const AUTO_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 export async function refreshTracked() {
   const token = serverToken();
   if (!token) return;
-  await mutateStore(async (store) => {
+  const refreshed = await mutateStore(async (store) => {
     if (!store.pullRequests.length) return;
     await runTrackingAction(store, { action: 'refresh' }, {
       viewer: () => fetchViewer(token),
       snapshot: (reference) => fetchSnapshot(reference, token),
     });
+    return true;
   });
+  if (refreshed) writeLog('info', 'auto-refresh.completed', {});
 }
 
 export function scheduleRefresh(refresh: () => Promise<void>, intervalMs = AUTO_REFRESH_INTERVAL_MS) {
