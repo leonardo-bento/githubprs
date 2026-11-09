@@ -61,7 +61,8 @@ test('backend refresh uses a session token without a browser and never persists 
     const query = JSON.parse(init.body).query;
     const data = query.includes('repository(owner:') ? { viewer: { login: 'me' }, repository: { pullRequest: {
       id: 'pr', title: 'Updated', author: { login: 'other' }, state: 'OPEN', isDraft: false, headRefOid: 'new',
-      viewerLatestReviewRequest: null, comments: connection, reviews: connection, reviewThreads: connection,
+      viewerLatestReviewRequest: null, comments: connection, reviews: connection,
+      latestOpinionatedReviews: connection, reviewThreads: connection,
     } } } : { viewer: { login: 'me' } };
     return Response.json({ data });
   });

@@ -123,3 +123,13 @@ test('cards expose saved involvement and refresh can clear it without creating u
   assert.equal(toCard(updated).unseen, false);
   assert.equal(toCard(pr()).involved, undefined);
 });
+
+test('cards expose review signals without changing unseen activity and leave legacy counts unknown', () => {
+  const reviewSignals = { approvalCount: 2, commentCount: 3 };
+  const tracked = pr({ seenRevision: 1 });
+  assert.equal(toCard(tracked).reviewSignals, undefined);
+  const updated = applySnapshot(tracked, snapshot({ reviewSignals }), 'me');
+  assert.deepEqual(toCard(updated).reviewSignals, reviewSignals);
+  assert.equal(toCard(updated).unseen, false);
+  assert.deepEqual(toCard({ ...updated, error: 'GitHub unavailable' }).reviewSignals, reviewSignals);
+});

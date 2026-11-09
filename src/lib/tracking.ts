@@ -3,6 +3,12 @@ export interface CommentSnapshot {
   id: string;
   author: string;
   createdAt: string;
+  authorType?: string;
+  published?: boolean;
+}
+export interface ReviewSignals {
+  approvalCount: number;
+  commentCount: number;
 }
 export interface ThreadSnapshot {
   id: string;
@@ -11,6 +17,8 @@ export interface ThreadSnapshot {
   comments: CommentSnapshot[];
 }
 export interface PRSnapshot {
+  // Legacy snapshots lack account types/current verdicts; populate counts on refresh.
+  reviewSignals?: ReviewSignals;
   involved?: boolean;
   title: string;
   author: string;
@@ -37,6 +45,7 @@ export interface TrackedPR extends PRReference {
   error?: string;
 }
 export interface TrackedCard extends PRReference {
+  reviewSignals?: ReviewSignals;
   involved?: boolean;
   title: string;
   author: string;
@@ -103,5 +112,6 @@ export function acknowledge(pr: TrackedPR, revision: number): TrackedPR {
 export function toCard(pr: TrackedPR): TrackedCard {
   const { snapshot, seenRevision, addedAt: _addedAt, ...rest } = pr;
   return { ...rest, title: snapshot.title, author: snapshot.author, status: snapshot.status,
-    involved: snapshot.involved, retrievedAt: snapshot.retrievedAt, unseen: pr.revision > seenRevision };
+    reviewSignals: snapshot.reviewSignals, involved: snapshot.involved,
+    retrievedAt: snapshot.retrievedAt, unseen: pr.revision > seenRevision };
 }

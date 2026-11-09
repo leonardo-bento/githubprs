@@ -8,7 +8,7 @@ const page = (nodes, more = false) => ({ nodes, pageInfo: { hasNextPage: more, e
 const comment = (id) => ({ id, author: { login: 'me' }, createdAt: '2026-10-01T12:00:00Z' });
 const thread = (id, more = false) => ({ id, isResolved: false, resolvedBy: null, comments: page([comment(`${id}-comment`)], more) });
 const pull = (overrides = {}) => ({ id: 'pull', viewerLatestReviewRequest: null, title: 'Feature', author: { login: 'me' }, state: 'OPEN', isDraft: false, headRefOid: 'sha',
-  comments: page([]), reviews: page([]), reviewThreads: page([]), ...overrides });
+  comments: page([]), reviews: page([]), latestOpinionatedReviews: page([]), reviewThreads: page([]), ...overrides });
 
 function response(data, status = 200) { return new Response(JSON.stringify(data), { status }); }
 
@@ -99,4 +99,82 @@ test('involvement detects requested reviewers, comments, inline replies and empt
       assert.equal((await fetchSnapshot(reference, 'token')).involved, expected);
     }
   } finally { global.fetch = original; }
+});
+
+test('counts human engagement across paginated sources, excluding bots, authors, unknown accounts and drafts', async () => {
+  const originalFetch = global.fetch;
+  const originalBots = process.env.GITHUB_BOT_USERS;
+  process.env.GITHUB_BOT_USERS = ' SERVICE-ACCOUNT, , other-automation ';
+  const human = (id, login = 'reviewer', extra = {}) => ({ ...comment(id), author: { login, __typename: 'User' }, ...extra });
+  const bot = (id) => human(id, 'analyzer', { author: { login: 'analyzer', __typename: 'Bot' } });
+  const review = (id, login, state = 'APPROVED', body = '') => human(id, login, { state, body });
+  const requests = [];
+  global.fetch = async (url, init) => {
+    const { query, variables } = JSON.parse(init.body);
+    requests.push(query);
+    assert.ok(query.includes('author { login __typename }'));
+    if (query.includes('repository(owner:')) return response({ data: { viewer: { login: 'viewer' }, repository: { pullRequest: pull({
+      comments: page([human('discussion'), human('author', 'ME'), bot('bot'), human('service', 'service-account'),
+        { ...comment('deleted'), author: null }, comment('unknown-type')], true),
+      reviews: page([review('summary', 'reviewer', 'APPROVED', 'Looks good'), review('empty', 'other'),
+        review('pending', 'other', 'PENDING', 'Draft'), review('bot-summary', 'service-account', 'COMMENTED', 'Automation'),
+        review('raw-service-approval', 'service-account')]),
+      latestOpinionatedReviews: page([review('approved', 'reviewer'), review('changed', 'changed', 'CHANGES_REQUESTED'),
+        review('dismissed', 'dismissed', 'DISMISSED'), review('author-approval', 'ME'),
+        { ...bot('bot-approval'), state: 'APPROVED' }, review('service-approval', 'SERVICE-account'),
+        { ...review('unknown-approval', 'unknown'), author: null }], true),
+      reviewThreads: page([{ id: 'thread', isResolved: true, resolvedBy: null, comments: page([
+        human('inline'), human('inline-author', 'me'), bot('inline-bot'),
+        human('inline-draft', 'reviewer', { pullRequestReview: { state: 'PENDING' } }),
+      ], true) }]),
+    }) } } });
+    if (query.includes('latestOpinionatedReviews(first:')) return response({ data: { node: { latestOpinionatedReviews: page([
+      review('second-approval', 'second'), review('duplicate-reviewer', 'REVIEWER'),
+    ]) } } });
+    if (variables.id === 'pull') return response({ data: { node: { comments: page([human('discussion'), human('discussion-page-2')]) } } });
+    assert.ok(query.includes('pullRequestReview { state }'));
+    return response({ data: { node: { comments: page([human('reply'), human('service-reply', 'service-account')]) } } });
+  };
+  try {
+    const result = await fetchSnapshot(reference, 'token');
+    assert.deepEqual(result.reviewSignals, { approvalCount: 2, commentCount: 5 });
+    assert.equal(requests.length, 4);
+    // The new exclusion rules do not filter the raw records used by unseen-activity tracking.
+    assert.ok(result.comments.some((c) => c.id === 'bot'));
+    assert.ok(result.approvals.some((c) => c.id === 'raw-service-approval'));
+    assert.ok(result.comments.every((c) => !('body' in c)));
+    assert.ok(result.threads[0].comments.some((c) => c.id === 'inline-draft'));
+  } finally {
+    global.fetch = originalFetch;
+    if (originalBots === undefined) delete process.env.GITHUB_BOT_USERS;
+    else process.env.GITHUB_BOT_USERS = originalBots;
+  }
+});
+
+test('approval indicator uses current verdicts instead of historical approval records', async () => {
+  const original = global.fetch;
+  const review = (id, state) => ({ ...comment(id), author: { login: 'reviewer', __typename: 'User' }, body: '', state });
+  try {
+    for (const [state, expected] of [['APPROVED', 1], ['CHANGES_REQUESTED', 0], ['DISMISSED', 0]]) {
+      global.fetch = async () => response({ data: { viewer: { login: 'me' }, repository: { pullRequest: pull({
+        reviews: page([review('old-approval', 'APPROVED'), review('latest', state)]),
+        latestOpinionatedReviews: page([review('latest', state)]),
+      }) } } });
+      const result = await fetchSnapshot(reference, 'token');
+      assert.equal(result.reviewSignals.approvalCount, expected);
+      assert.equal(result.reviewSignals.commentCount, 0);
+    }
+  } finally { global.fetch = original; }
+});
+
+test('fails rather than saving partial indicators if current review pagination fails', async () => {
+  const original = global.fetch;
+  global.fetch = async (url, init) => {
+    const { query } = JSON.parse(init.body);
+    return query.includes('repository(owner:')
+      ? response({ data: { viewer: { login: 'me' }, repository: { pullRequest: pull({ latestOpinionatedReviews: page([], true) }) } } })
+      : response({ errors: [{ message: 'Review pagination failed' }] });
+  };
+  try { await assert.rejects(fetchSnapshot(reference, 'token'), /Review pagination failed/); }
+  finally { global.fetch = original; }
 });

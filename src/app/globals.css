@@ -319,6 +319,13 @@ body {
 .pr-status-merged { color: #a371f7; }
 .pr-status-closed { color: var(--destructive); }
 .retrieval-time { font-size: .75rem; margin-top: .3rem; }
+.review-indicators { display: inline-flex; gap: 1rem; margin-top: .5rem; }
+.review-indicator { position: relative; display: inline-flex; align-items: center; gap: .35rem; color: var(--muted-foreground); font-size: .8rem; font-variant-numeric: tabular-nums; cursor: help; }
+.review-indicator-approvals { color: var(--success); }
+.review-indicator-comments { color: var(--foreground); }
+.review-indicator:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.review-tooltip { display: none; position: absolute; bottom: calc(100% + .5rem); left: 0; width: max-content; max-width: min(20rem, 70vw); padding: .5rem .65rem; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--foreground); color: var(--background); font-size: .75rem; z-index: 1; box-shadow: var(--shadow); }
+.review-indicator:hover .review-tooltip, .review-indicator:focus .review-tooltip { display: block; }
 .pr-actions { display: flex; flex-shrink: 0; gap: .5rem; }
 .remove-button { color: var(--muted-foreground); }
 .pr-error { font-size: .8rem; color: var(--destructive); margin-top: .5rem; overflow-wrap: anywhere; }

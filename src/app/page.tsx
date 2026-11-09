@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Discover, { DiscoverySettings } from '@/components/Discover';
 import InputField from '@/components/InputField';
 import RemoveConfirmation from '@/components/RemoveConfirmation';
+import ReviewIndicators from '@/components/ReviewIndicators';
 import type { TrackedCard } from '@/lib/tracking';
 import { ActivityNotifications, notificationPermission } from '@/lib/notifications';
 
@@ -122,6 +123,7 @@ export default function Home() {
               {pr.unseen && <span className="activity-badge">Unseen changes</span>}
             </a>
             <div className="pr-meta"><span>{pr.owner}/{pr.repo} #{pr.number}</span><span>by {pr.author || 'deleted user'}</span>{pr.involved && pr.author.toLowerCase() !== viewer.toLowerCase() && <span className="status-badge involved-badge">Involved</span>}<span className={`pr-status pr-status-${pr.status.toLowerCase()}`}>{pr.status}</span></div>
+            <ReviewIndicators signals={pr.reviewSignals} />
             <p className="retrieval-time">Last retrieved <time dateTime={pr.retrievedAt}>{new Date(pr.retrievedAt).toLocaleString()}</time></p>
             {pr.error && <p role="alert" className="pr-error">Could not refresh: {pr.error}</p>}
           </div>
